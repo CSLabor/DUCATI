@@ -15,16 +15,13 @@ from common import set_random_seeds, fast_reorder
 from mylog import get_logger
 mlog = get_logger()
 
-root_dir = os.environ["root_dir"]
+root_dir = "./preprocess"
 
 def load_dc_raw(args, coo=False):
-    assert args.dataset in ['ogbn-papers100M', 'uk', 'uk-union', 'friendster', 'twitter']
+    assert args.dataset in ['ogbn-papers100M', 'uk', 'uk-union', 'twitter']
     mlog(f"loading raw dataset of {args.dataset}")
     tic = time.time()
-    try:
-        ds = dgl.load_graphs(f'{root_dir}/USERNAME/datasets/dual_cache/dgl_{args.dataset}.bin')[0][0]
-    except:
-        ds = dgl.load_graphs(f"/export/data/USERNAME/datasets/dual_cache/dgl_{args.dataset}.bin")[0][0]
+    ds = dgl.load_graphs(f'{root_dir}/dgl_{args.dataset}.bin')[0][0]
     if coo:
         src, dst = ds.adj_sparse(fmt='coo')
     ds = ds.formats(['csc'])
