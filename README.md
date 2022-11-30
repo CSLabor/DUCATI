@@ -1,6 +1,6 @@
 # DUCATI
 
-This repository contains python components of DUCATI and the overall training scripts.
+This repository contains some python components of DUCATI and the overall training scripts.
 We put the underlying implementations of some APIs in a customized version of DGL (https://github.com/CSLabor/DUCATI_dgl.git).
 
 Please follow these steps to prepare environment and datasets:
