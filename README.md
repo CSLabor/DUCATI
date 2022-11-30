@@ -11,5 +11,5 @@ Please follow these steps to prepare environment and datasets:
 
 Then we run the DUCATI with different settings as follows:
 ```
-CUDA_VISIBLE_DEVICES=0 python run.py --dataset [DS] --fanouts [DS] --dim [DM] --total-budget [TB]
+CUDA_VISIBLE_DEVICES=0 python run.py --dataset [DS] --fanouts [DS] --fake-dim [FD] --total-budget [TB]
 ```
