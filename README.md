@@ -9,7 +9,14 @@ Please follow these steps to prepare environment and datasets:
 3. prepare the datasets: download PA from [OGB](https://ogb.stanford.edu/docs/nodeprop/#ogbn-papers100M), download UK & UU & TW from [GNNLab](https://github.com/SJTU-IPADS/fgnn-artifacts) and [WebGraph](https://webgraph.di.unimi.it)
 4. pre-process the datasets using scripts in the `preprocess` directory
 
-Then we run the DUCATI with different settings as follows:
+Then we can run the experiments under different settings as follows:
 ```
+# DUCATI
 CUDA_VISIBLE_DEVICES=0 python run.py --dataset [DS] --fanouts [DS] --fake-dim [FD] --total-budget [TB]
+
+# SOTA
+CUDA_VISIBLE_DEVICES=0 python run_baseline.py --dataset [DS] --fanouts [DS] --fake-dim [FD] --nfeat-budget [TB]
+
+# DGL
+CUDA_VISIBLE_DEVICES=0 python run_baseline.py --dataset [DS] --fanouts [DS] --fake-dim [FD] --nfeat-budget 0
 ```

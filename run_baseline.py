@@ -19,13 +19,10 @@ from common import set_random_seeds, get_seeds_list
 def entry(args, graph, all_data, seeds_list, counts):
     fanouts = [int(x) for x in args.fanouts.split(",")]
 
-    # dual cache allocator
-    adj_slope, nfeat_slope = DUCATI.DualCacheAllocator.get_slope(args, graph, counts, seeds_list, all_data)
-    args.adj_slope = adj_slope
-    args.nfeat_slope = nfeat_slope
-    cached_indptr, cached_indices, gpu_flag, gpu_map, all_cache = DUCATI.DualCacheAllocator.allocate_dual_cache(args, graph, all_data, counts)
+    # nfeat cache allocator
+    gpu_flag, gpu_map, all_cache, _ = DUCATI.CacheConstructor.form_nfeat_cache(args, all_data, counts)
 
-    sampler = DUCATI.NeighborSampler(cached_indptr, cached_indices, fanouts)
+    sampler = dgl.dataloading.NeighborSampler(fanouts)
     nfeat_loader = DUCATI.NfeatLoader(all_data[0], all_cache[0], gpu_map, gpu_flag)
     label_loader = DUCATI.NfeatLoader(all_data[1], all_cache[1], gpu_map, gpu_flag)
 
@@ -42,14 +39,29 @@ def entry(args, graph, all_data, seeds_list, counts):
     loss_fcn = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
+    def retrieve_data(cpu_data, gpu_data, idx, out_buf):
+        nonlocal gpu_map, gpu_flag
+        if gpu_map is None:
+            cur_res = cpu_data[idx]
+        else:
+            gpu_mask = gpu_flag[idx]
+            gpu_nids = idx[gpu_mask]
+            gpu_local_nids = gpu_map[gpu_nids].long()
+            cpu_nids = idx[~gpu_mask]
+
+            cur_res = out_buf[:idx.shape[0]]
+            cur_res[gpu_mask] = gpu_data[gpu_local_nids]
+            cur_res[~gpu_mask] = cpu_data[cpu_nids]
+        return cur_res
+
     def run_one_list(target_list):
         nonlocal gpu_flag, gpu_map, all_cache, all_data, sampler
         for seeds in target_list:
-            # Adj-Sampling
+            # adj
             input_nodes, output_nodes, blocks = sampler.sample(graph, seeds)
-            # Nfeat-Selecting
-            cur_nfeat = nfeat_loader.load(input_nodes, nfeat_buf) # fetch nfeat
-            cur_label = label_loader.load(input_nodes[:args.bs], label_buf) # fetch label
+            # nfeat
+            cur_nfeat = retrieve_data(all_data[0], all_cache[0], input_nodes, nfeat_buf) # fetch nfeat
+            cur_label = retrieve_data(all_data[1], all_cache[1], input_nodes[:args.bs], label_buf) # fetch label
             # train
             batch_pred = model(blocks, cur_nfeat)
             loss = loss_fcn(batch_pred, cur_label)
@@ -79,18 +91,12 @@ if __name__ == '__main__':
 
     # running params
     parser.add_argument("--nfeat-budget", type=float, default=0) # in GB
-    parser.add_argument("--adj-budget", type=float, default=0) # in GB
     parser.add_argument("--bs", type=int, default=8000)
     parser.add_argument("--fanouts", type=str, default='15,15,15')
     parser.add_argument("--batches", type=int, default=1000)
     parser.add_argument("--runs", type=int, default=4)
     parser.add_argument("--fake-dim", type=int, default=100)
-
-    # dual cache allocator params
-    parser.add_argument("--total-budget", type=float, default=1)
     parser.add_argument("--pre-batches", type=int, default=100)
-    parser.add_argument("--nfeat-slope", type=float, default=1)
-    parser.add_argument("--adj-slope", type=float, default=1)
 
     # gnn model params
     parser.add_argument('--num-hidden', type=int, default=16)
