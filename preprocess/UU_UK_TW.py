@@ -3,7 +3,8 @@ import pandas
 import torch
 
 """
-get the *_coo.txt* files from GNNLab & WebGraph
+get the *_coo.txt files from GNNLab & WebGraph
+each line of such file is "src_id\tdst_id" representing an edge, namely the COO format
 """
 
 for name in ['uk-union', 'uk', 'twitter']:

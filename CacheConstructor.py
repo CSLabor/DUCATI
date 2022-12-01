@@ -8,7 +8,6 @@ mlog = get_logger()
 
 def form_nfeat_cache(args, all_data, counts):
     if args.nfeat_budget == 0:
-        mlog('zero node feature cache! fallback to pure UVA')
         return None, None, [None]*len(all_data), 0
 
     # get probs and order
@@ -21,11 +20,9 @@ def form_nfeat_cache(args, all_data, counts):
     for data in all_data:
         SINGLE_LINE_SIZE += (data.shape[1] if len(data.shape) > 1 else 1) * data[torch.arange(1)].element_size()
     
-    mlog(f"nfeat cache budget: {args.nfeat_budget:.3f}GB, total nfeat size: {SINGLE_LINE_SIZE*nfeat_probs.shape[0]/(1024**3):.3f}GB")
     cache_nums = int(args.nfeat_budget * (1024**3) / SINGLE_LINE_SIZE)
     cache_nids = nfeat_order[:cache_nums]
     accum_hit = nfeat_probs[:cache_nums].sum().item()
-    mlog(f"cache top {cache_nids.shape[0]} lines, accum_hit {accum_hit:.3f}")
 
     # prepare flag
     gpu_flag = torch.zeros(all_data[0].shape[0], dtype=torch.bool)
@@ -53,7 +50,6 @@ def form_adj_cache(args, graph, counts):
     else:
         cache_elements = cache_bytes // 4
         graph_bytes = (graph.num_edges()+graph.num_nodes()+1) * 4.
-    mlog(f"adj cache budget: {args.adj_budget:.3f}GB, total adj size: {graph_bytes/(1024**3):.3f} GB")
 
     # search break point
     indptr, indices, _ = graph.adj_sparse(fmt='csc')
@@ -68,7 +64,6 @@ def form_adj_cache(args, graph, counts):
     adj_counts = counts[0]
     adj_probs = adj_counts / adj_counts.sum()
     accum_hit = adj_probs[:cache_size].sum()
-    mlog(f"cache top {cache_size} adj lists, accum_hit: {accum_hit:.3f}")
 
     return cached_indptr, cached_indices
 
@@ -86,7 +81,7 @@ def separate_features_idx(args, graph):
     fake_nfeat = dgl.contrib.UnifiedTensor(torch.rand((graph.num_nodes(), args.fake_dim), dtype=torch.float), device='cuda')
     fake_label = dgl.contrib.UnifiedTensor(torch.randint(args.n_classes, (graph.num_nodes(), ), dtype=torch.long), device='cuda')
 
-    mlog(f'finish generate fake input with dim={args.fake_dim}, time elapsed: {time.time()-separate_tic:.2f}s')
+    mlog(f'finish generating random features with dim={args.fake_dim}, time elapsed: {time.time()-separate_tic:.2f}s')
     return graph, [fake_nfeat, fake_label], train_idx, [adj_counts, nfeat_counts]
 
 

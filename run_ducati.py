@@ -18,23 +18,19 @@ from common import set_random_seeds, get_seeds_list
 
 def entry(args, graph, all_data, seeds_list, counts):
     fanouts = [int(x) for x in args.fanouts.split(",")]
-
-    # dual cache allocator
-    adj_slope, nfeat_slope = DUCATI.DualCacheAllocator.get_slope(args, graph, counts, seeds_list, all_data)
-    args.adj_slope = adj_slope
-    args.nfeat_slope = nfeat_slope
-    cached_indptr, cached_indices, gpu_flag, gpu_map, all_cache = DUCATI.DualCacheAllocator.allocate_dual_cache(args, graph, all_data, counts)
-
+    cached_indptr, cached_indices = DUCATI.CacheConstructor.form_adj_cache(args, graph, counts)
     sampler = DUCATI.NeighborSampler(cached_indptr, cached_indices, fanouts)
-    nfeat_loader = DUCATI.NfeatLoader(all_data[0], all_cache[0], gpu_map, gpu_flag)
-    label_loader = DUCATI.NfeatLoader(all_data[1], all_cache[1], gpu_map, gpu_flag)
+    gpu_flag, gpu_map, all_cache, _ = DUCATI.CacheConstructor.form_nfeat_cache(args, all_data, counts)
 
-    # prepare necessary buffer
+    # prepare a buffer
     input_nodes, _, _ = sampler.sample(graph, seeds_list[0])
     estimate_max_batch = int(1.2*input_nodes.shape[0])
     nfeat_buf = torch.zeros((estimate_max_batch, args.fake_dim), dtype=torch.float).cuda()
     label_buf = torch.zeros((args.bs, ), dtype=torch.long).cuda()
     mlog(f"buffer size: {(estimate_max_batch*args.fake_dim*4+args.bs*8)/(1024**3):.3f} GB")
+
+    nfeat_loader = DUCATI.NfeatLoader(all_data[0], all_cache[0], gpu_map, gpu_flag)
+    label_loader = DUCATI.NfeatLoader(all_data[1], all_cache[1], gpu_map, gpu_flag)
 
     # prepare model
     model = SAGE(args.fake_dim, args.num_hidden, args.n_classes, len(fanouts), F.relu, args.dropout)
@@ -67,7 +63,7 @@ def entry(args, graph, all_data, seeds_list, counts):
         avg_duration = 1000*(time.time() - tic)/len(seeds_list)
         avgs.append(avg_duration)
     avgs = avgs[1:]
-    mlog(f"{args.adj_budget:.3f}GB adj cache & {args.nfeat_budget:.3f}GB nfeat cache time: {np.mean(avgs):.2f} ± {np.std(avgs):.2f}ms\n")
+    mlog(f"ducati: {args.adj_budget:.3f}GB adj cache & {args.nfeat_budget:.3f}GB nfeat cache time: {np.mean(avgs):.2f} ± {np.std(avgs):.2f}ms\n")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -83,14 +79,9 @@ if __name__ == '__main__':
     parser.add_argument("--bs", type=int, default=8000)
     parser.add_argument("--fanouts", type=str, default='15,15,15')
     parser.add_argument("--batches", type=int, default=1000)
-    parser.add_argument("--runs", type=int, default=4)
+    parser.add_argument("--runs", type=int, default=10)
     parser.add_argument("--fake-dim", type=int, default=100)
-
-    # dual cache allocator params
-    parser.add_argument("--total-budget", type=float, default=1)
     parser.add_argument("--pre-batches", type=int, default=100)
-    parser.add_argument("--nfeat-slope", type=float, default=1)
-    parser.add_argument("--adj-slope", type=float, default=1)
 
     # gnn model params
     parser.add_argument('--num-hidden', type=int, default=16)
@@ -101,6 +92,7 @@ if __name__ == '__main__':
     mlog(args)
     set_random_seeds(0)
 
+    # DUCATI
     graph, n_classes = load_dc_realtime_process(args)
     args.n_classes = n_classes
     graph, all_data, train_idx, counts = DUCATI.CacheConstructor.separate_features_idx(args, graph)

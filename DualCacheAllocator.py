@@ -28,8 +28,7 @@ def allocate_dual_cache(args, graph, all_data, counts):
     nfeat_size_array = torch.ones(graph.num_nodes()) * SINGLE_LINE_SIZE
     nfeat_density_array = (nfeat_counts / nfeat_counts.sum()) * args.nfeat_slope / SINGLE_LINE_SIZE
     nfeat_id_array = torch.arange(graph.num_nodes())
-    mlog("finish construct density and size array")
-    mlog(f"zero element ratio: adj {(adj_counts<1).sum()/adj_counts.shape[0]:.2f}, nfeat {(nfeat_counts<1).sum()/nfeat_counts.shape[0]:.2f}")
+    mlog("finish constructing density and size array")
 
     adj_info = torch.stack((adj_density_array, adj_size_array, adj_id_array), dim=-1) # in shape Nx3
     nfeat_info = torch.stack((nfeat_density_array, nfeat_size_array, nfeat_id_array), dim=-1) # in shape Nx3
@@ -71,6 +70,7 @@ def allocate_dual_cache(args, graph, all_data, counts):
 
 
 def get_slope(args, graph, counts, seeds_list, all_data):
+    mlog(f"start profiling and calculating slope")
     slope_tic = time.time()
     fanouts = [int(x) for x in args.fanouts.split(",")]
     adj_counts, nfeat_counts = counts
@@ -111,7 +111,6 @@ def get_slope(args, graph, counts, seeds_list, all_data):
     input_nodes_list = []
     for seeds in seeds_list[:args.pre_batches]:
         input_nodes_list.append(sampler.sample(graph, seeds)[0].cpu())
-    mlog(f"adj stats: {adj_stats}")
 
     ###################
     ### get nfeat slope
@@ -178,7 +177,6 @@ def get_slope(args, graph, counts, seeds_list, all_data):
         del gpu_flag, gpu_map, all_cache, nfeat_buf, label_buf, input_nodes
         torch.cuda.empty_cache()
     args.nfeat_budget = nfeat_budget_backup
-    mlog(f"nfeat stats: {nfeat_stats}")
 
     adj_stats = np.array(adj_stats)
     nfeat_stats = np.array(nfeat_stats)
@@ -186,7 +184,7 @@ def get_slope(args, graph, counts, seeds_list, all_data):
     nfeat_slope = -np.polyfit(nfeat_stats[:,0], nfeat_stats[:,1], 1)[0]
     assert nfeat_slope > 0
     assert adj_slope > 0
-    mlog(f"finish calculate slope: adj({adj_slope:.2f}) nfeat({nfeat_slope:.2f}), time elapsed: {time.time() - slope_tic:.2f}s")
+    mlog(f"finish calculating slope: adj({adj_slope:.2f}) nfeat({nfeat_slope:.2f}), time elapsed: {time.time() - slope_tic:.2f}s")
 
     return adj_slope, nfeat_slope
 

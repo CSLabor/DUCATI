@@ -13,25 +13,21 @@ mlog = get_logger()
 
 import DUCATI
 from model import SAGE
-from load_graph import load_dc_realtime_process
+from load_graph import load_dc_raw_with_counts
 from common import set_random_seeds, get_seeds_list
 
 def entry(args, graph, all_data, seeds_list, counts):
     fanouts = [int(x) for x in args.fanouts.split(",")]
-
-    # nfeat cache allocator
+    sampler = dgl.dataloading.NeighborSampler(fanouts)
     gpu_flag, gpu_map, all_cache, _ = DUCATI.CacheConstructor.form_nfeat_cache(args, all_data, counts)
 
-    sampler = dgl.dataloading.NeighborSampler(fanouts)
-    nfeat_loader = DUCATI.NfeatLoader(all_data[0], all_cache[0], gpu_map, gpu_flag)
-    label_loader = DUCATI.NfeatLoader(all_data[1], all_cache[1], gpu_map, gpu_flag)
-
-    # prepare necessary buffer
+    # prepare a buffer
     input_nodes, _, _ = sampler.sample(graph, seeds_list[0])
     estimate_max_batch = int(1.2*input_nodes.shape[0])
     nfeat_buf = torch.zeros((estimate_max_batch, args.fake_dim), dtype=torch.float).cuda()
     label_buf = torch.zeros((args.bs, ), dtype=torch.long).cuda()
     mlog(f"buffer size: {(estimate_max_batch*args.fake_dim*4+args.bs*8)/(1024**3):.3f} GB")
+
 
     # prepare model
     model = SAGE(args.fake_dim, args.num_hidden, args.n_classes, len(fanouts), F.relu, args.dropout)
@@ -41,17 +37,14 @@ def entry(args, graph, all_data, seeds_list, counts):
 
     def retrieve_data(cpu_data, gpu_data, idx, out_buf):
         nonlocal gpu_map, gpu_flag
-        if gpu_map is None:
-            cur_res = cpu_data[idx]
-        else:
-            gpu_mask = gpu_flag[idx]
-            gpu_nids = idx[gpu_mask]
-            gpu_local_nids = gpu_map[gpu_nids].long()
-            cpu_nids = idx[~gpu_mask]
+        gpu_mask = gpu_flag[idx]
+        gpu_nids = idx[gpu_mask]
+        gpu_local_nids = gpu_map[gpu_nids].long()
+        cpu_nids = idx[~gpu_mask]
 
-            cur_res = out_buf[:idx.shape[0]]
-            cur_res[gpu_mask] = gpu_data[gpu_local_nids]
-            cur_res[~gpu_mask] = cpu_data[cpu_nids]
+        cur_res = out_buf[:idx.shape[0]]
+        cur_res[gpu_mask] = gpu_data[gpu_local_nids]
+        cur_res[~gpu_mask] = cpu_data[cpu_nids]
         return cur_res
 
     def run_one_list(target_list):
@@ -79,7 +72,7 @@ def entry(args, graph, all_data, seeds_list, counts):
         avg_duration = 1000*(time.time() - tic)/len(seeds_list)
         avgs.append(avg_duration)
     avgs = avgs[1:]
-    mlog(f"{args.adj_budget:.3f}GB adj cache & {args.nfeat_budget:.3f}GB nfeat cache time: {np.mean(avgs):.2f} ± {np.std(avgs):.2f}ms\n")
+    mlog(f"sota: {args.nfeat_budget:.3f}GB nfeat cache time: {np.mean(avgs):.2f} ± {np.std(avgs):.2f}ms\n")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -90,11 +83,11 @@ if __name__ == '__main__':
     parser.add_argument("--pre-epochs", type=int, default=2) # PreSC params
 
     # running params
-    parser.add_argument("--nfeat-budget", type=float, default=0) # in GB
+    parser.add_argument("--nfeat-budget", type=float, default=1) # in GB
     parser.add_argument("--bs", type=int, default=8000)
     parser.add_argument("--fanouts", type=str, default='15,15,15')
     parser.add_argument("--batches", type=int, default=1000)
-    parser.add_argument("--runs", type=int, default=4)
+    parser.add_argument("--runs", type=int, default=10)
     parser.add_argument("--fake-dim", type=int, default=100)
     parser.add_argument("--pre-batches", type=int, default=100)
 
@@ -107,7 +100,7 @@ if __name__ == '__main__':
     mlog(args)
     set_random_seeds(0)
 
-    graph, n_classes = load_dc_realtime_process(args)
+    graph, n_classes = load_dc_raw_with_counts(args)
     args.n_classes = n_classes
     graph, all_data, train_idx, counts = DUCATI.CacheConstructor.separate_features_idx(args, graph)
     train_idx = train_idx.cuda()

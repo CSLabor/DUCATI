@@ -1,6 +1,6 @@
 # DUCATI
 
-This repository contains some python components of DUCATI and the overall training scripts.
+This repository contains implementation of DUCATI & SOTA and the overall training scripts.
 We put the underlying implementations of some APIs in a customized version of DGL (https://github.com/CSLabor/DUCATI_dgl.git).
 
 Please follow these steps to prepare environment and datasets:
@@ -11,12 +11,12 @@ Please follow these steps to prepare environment and datasets:
 
 Then we can run the experiments under different settings as follows:
 ```
-# DUCATI
-CUDA_VISIBLE_DEVICES=0 python run.py --dataset [DS] --fanouts [DS] --fake-dim [FD] --total-budget [TB]
+# verify dual cache allocation plan of DUCATI
+CUDA_VISIBLE_DEVICES=0 python run_allocate.py --dataset [DS] --fanouts [DS] --fake-dim [FD] --total-budget [TB]
 
-# SOTA
-CUDA_VISIBLE_DEVICES=0 python run_baseline.py --dataset [DS] --fanouts [DS] --fake-dim [FD] --nfeat-budget [TB]
+# verify iteration time of DUCATI using the allocation plan above 
+CUDA_VISIBLE_DEVICES=0 python run_ducati.py --dataset [DS] --fanouts [DS] --fake-dim [FD] --adj-budget [AB] --nfeat-budget [NB]
 
-# DGL
-CUDA_VISIBLE_DEVICES=0 python run_baseline.py --dataset [DS] --fanouts [DS] --fake-dim [FD] --nfeat-budget 0
+# verify iteration time of SOTA
+CUDA_VISIBLE_DEVICES=0 python run_sota.py --dataset [DS] --fanouts [DS] --fake-dim [FD] --nfeat-budget [NB]
 ```

@@ -83,30 +83,22 @@ def load_dc_realtime_process(args):
         train_idx = torch.randperm(num_nodes)[:num_train_nodes]
     graph.ndata.clear()
     graph.edata.clear()
-    mlog("finish generating train_idx")
     graph.pin_memory_()
     train_idx = train_idx.cuda()
-    mlog("finish pin graph and move train_idx")
     adj_counts, nfeat_counts = generate_stats(args, graph, train_idx)
     graph.unpin_memory_()
     train_idx = train_idx.cpu()
     torch.cuda.empty_cache()
-    mlog("finish unpin graph and empty cuda use")
 
     # reorder graph
     degs = graph.in_degrees() + 1
     priority = adj_counts/degs
     adj_order = priority.argsort(descending=True)
-    mlog("got adj order")
     graph = fast_reorder((src, dst), adj_order)
     del src, dst
-    mlog("coo perm finished")
-    mlog(f"construct new dgl graph")
     indptr, indices, _ = graph.adj_sparse(fmt='csc')
     del graph
-    mlog("finish coo to csc")
     new_graph = dgl.graph(('csc', (indptr, indices, torch.tensor([]))), num_nodes=num_nodes)
-    mlog("finish constructing new csc")
 
     # prepare other ndata, reorder accordingly and save ndata
     train_mask = torch.zeros(num_nodes, dtype=torch.bool)
